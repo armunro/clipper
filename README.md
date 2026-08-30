@@ -1,0 +1,2 @@
+# clipper
+Smart clipboard

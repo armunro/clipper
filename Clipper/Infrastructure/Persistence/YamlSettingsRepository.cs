@@ -1,10 +1,11 @@
 using System.IO;
+using Clipper.Core.Ports.Outbound;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace Clipper;
+namespace Clipper.Infrastructure.Persistence;
 
-public class SettingsManager
+public class YamlSettingsRepository : ISettingsRepository
 {
     private static readonly string ConfigPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -15,9 +16,7 @@ public class SettingsManager
     private readonly ISerializer _serializer;
     private readonly IDeserializer _deserializer;
 
-    public AppSettings Settings { get; private set; } = new();
-
-    public SettingsManager()
+    public YamlSettingsRepository()
     {
         _serializer = new SerializerBuilder()
             .WithNamingConvention(PascalCaseNamingConvention.Instance)
@@ -27,38 +26,36 @@ public class SettingsManager
             .WithNamingConvention(PascalCaseNamingConvention.Instance)
             .IgnoreUnmatchedProperties()
             .Build();
-
-        Load();
     }
 
-    public void Load()
+    public AppSettings Load()
     {
         if (!File.Exists(ConfigPath))
         {
-            Settings = new AppSettings();
-            Save();
-            return;
+            var defaults = new AppSettings();
+            Save(defaults);
+            return defaults;
         }
 
         try
         {
             string yaml = File.ReadAllText(ConfigPath);
-            Settings = _deserializer.Deserialize<AppSettings>(yaml) ?? new AppSettings();
+            return _deserializer.Deserialize<AppSettings>(yaml) ?? new AppSettings();
         }
         catch
         {
-            Settings = new AppSettings();
+            return new AppSettings();
         }
     }
 
-    public void Save()
+    public void Save(AppSettings settings)
     {
         try
         {
             string directory = Path.GetDirectoryName(ConfigPath)!;
             if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
 
-            string yaml = _serializer.Serialize(Settings);
+            string yaml = _serializer.Serialize(settings);
             File.WriteAllText(ConfigPath, yaml);
         }
         catch (Exception ex)

@@ -1,9 +1,8 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Clipper.Helpers;
+using Clipper.Core.Ports.Outbound;
 using Point = System.Windows.Point;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
@@ -12,14 +11,16 @@ namespace Clipper.Windows;
 
 public partial class CaptureOverlayWindow : Window
 {
+    private readonly IScreenCaptureService _screenCaptureService;
     private Point _startPoint;
     private bool _isDragging;
     public BitmapSource? CapturedImage { get; private set; }
     public bool IsWindowCapture { get; private set; }
 
-    public CaptureOverlayWindow()
+    public CaptureOverlayWindow(IScreenCaptureService screenCaptureService)
     {
         InitializeComponent();
+        _screenCaptureService = screenCaptureService;
     }
 
     private void Window_MouseDown(object sender, MouseButtonEventArgs e)
@@ -83,7 +84,7 @@ public partial class CaptureOverlayWindow : Window
                 // Wait for opacity to apply
                 System.Threading.Thread.Sleep(50);
                 
-                CapturedImage = ScreenCaptureHelper.CaptureRegion(new Int32Rect((int)screenPoint.X, (int)screenPoint.Y, (int)width, (int)height));
+                CapturedImage = _screenCaptureService.CaptureRegion(new Int32Rect((int)screenPoint.X, (int)screenPoint.Y, (int)width, (int)height));
                 DialogResult = true;
             }
         }
@@ -96,10 +97,10 @@ public partial class CaptureOverlayWindow : Window
             // Wait for opacity to apply
             System.Threading.Thread.Sleep(50);
 
-            IntPtr hWnd = ScreenCaptureHelper.GetWindowAt(screenPoint);
+            IntPtr hWnd = _screenCaptureService.GetWindowAt(screenPoint);
             if (hWnd != IntPtr.Zero)
             {
-                CapturedImage = ScreenCaptureHelper.CaptureWindow(hWnd);
+                CapturedImage = _screenCaptureService.CaptureWindow(hWnd);
                 IsWindowCapture = true;
                 DialogResult = true;
             }

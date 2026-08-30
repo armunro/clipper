@@ -1,13 +1,15 @@
-﻿using System.Drawing;
+using System.Drawing;
 using System.Drawing.Imaging;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media.Imaging;
-using System.IO;
+using Clipper.Core.Ports.Outbound;
+using Point = System.Windows.Point;
 
-namespace Clipper.Helpers;
+namespace Clipper.Infrastructure.Adapters;
 
-public static class ScreenCaptureHelper
+public class WindowsScreenCaptureAdapter : IScreenCaptureService
 {
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
@@ -37,9 +39,9 @@ public static class ScreenCaptureHelper
         public int Y;
     }
 
-    public static BitmapSource CaptureRegion(Int32Rect region)
+    public BitmapSource CaptureRegion(Int32Rect region)
     {
-        using (Bitmap bitmap = new Bitmap(region.Width, region.Height, PixelFormat.Format32bppArgb))
+        using (Bitmap bitmap = new Bitmap(region.Width, region.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
         {
             using (Graphics g = Graphics.FromImage(bitmap))
             {
@@ -49,13 +51,13 @@ public static class ScreenCaptureHelper
         }
     }
 
-    public static BitmapSource CaptureWindow(IntPtr hWnd)
+    public BitmapSource CaptureWindow(IntPtr hWnd)
     {
         GetWindowRect(hWnd, out RECT rect);
         int width = rect.Right - rect.Left;
         int height = rect.Bottom - rect.Top;
 
-        using (Bitmap bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb))
+        using (Bitmap bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
         {
             using (Graphics g = Graphics.FromImage(bitmap))
             {
@@ -65,19 +67,18 @@ public static class ScreenCaptureHelper
         }
     }
 
-    public static IntPtr GetWindowAt(System.Windows.Point point)
+    public IntPtr GetWindowAt(Point point)
     {
         POINT p = new POINT { X = (int)point.X, Y = (int)point.Y };
         IntPtr hWnd = WindowFromPoint(p);
-        
-        // Try to get the top-level window
+
         IntPtr parent = GetParent(hWnd);
         while (parent != IntPtr.Zero)
         {
             hWnd = parent;
             parent = GetParent(hWnd);
         }
-        
+
         return hWnd;
     }
 

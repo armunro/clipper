@@ -1,23 +1,23 @@
+using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
-using Clipper;
-using System.Collections.ObjectModel;
+using Clipper.Core.Ports.Inbound;
 using Wpf.Ui.Controls;
 
 namespace Clipper.Windows;
 
 public partial class PatternEditorWindow : FluentWindow
 {
-    private readonly PatternManager _manager;
+    private readonly IPatternService _patternService;
     private ObservableCollection<ClipboardPattern> _patterns;
     private ClipboardPattern? _selectedPattern;
 
-    public PatternEditorWindow(PatternManager manager)
+    public PatternEditorWindow(IPatternService patternService)
     {
         InitializeComponent();
         ThemeHelper.ApplyDarkTheme(this);
-        _manager = manager;
-        _patterns = new ObservableCollection<ClipboardPattern>(_manager.Patterns);
+        _patternService = patternService;
+        _patterns = new ObservableCollection<ClipboardPattern>(_patternService.Patterns);
         lstPatterns.ItemsSource = _patterns;
     }
 
@@ -123,9 +123,7 @@ public partial class PatternEditorWindow : FluentWindow
     private void SaveAll_Click(object sender, RoutedEventArgs e)
     {
         SaveCurrentPattern();
-        _manager.Patterns.Clear();
-        _manager.Patterns.AddRange(_patterns);
-        _manager.Save();
+        _patternService.Save(_patterns);
         DialogResult = true;
         Close();
     }

@@ -1,24 +1,25 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Clipper.Core.Ports.Inbound;
 using Wpf.Ui.Controls;
 
 namespace Clipper.Windows;
 
 public partial class SettingsWindow : FluentWindow
 {
-    private readonly SettingsManager _settingsManager;
+    private readonly ISettingsService _settingsService;
     private HotkeyConfig _currentHotkey;
     private bool _isUpdatingUi = false;
     private bool _isRecording = false;
 
-    public SettingsWindow(SettingsManager settingsManager)
+    public SettingsWindow(ISettingsService settingsService)
     {
         InitializeComponent();
-        _settingsManager = settingsManager;
+        _settingsService = settingsService;
         ThemeHelper.ApplyDarkTheme(this);
 
-        _currentHotkey = _settingsManager.Settings.Hotkey.Clone();
+        _currentHotkey = _settingsService.Settings.Hotkey.Clone();
 
         PopulateKeys();
         LoadSettingsToUi();
@@ -66,7 +67,7 @@ public partial class SettingsWindow : FluentWindow
         // Window placement
         foreach (ComboBoxItem item in cmbPlacement.Items)
         {
-            if (item.Tag is WindowPlacement placement && placement == _settingsManager.Settings.Placement)
+            if (item.Tag is WindowPlacement placement && placement == _settingsService.Settings.Placement)
             {
                 cmbPlacement.SelectedItem = item;
                 break;
@@ -188,11 +189,11 @@ public partial class SettingsWindow : FluentWindow
     {
         if (cmbPlacement.SelectedItem is ComboBoxItem selectedPlacement && selectedPlacement.Tag is WindowPlacement placement)
         {
-            _settingsManager.Settings.Placement = placement;
+            _settingsService.Settings.Placement = placement;
         }
 
-        _settingsManager.Settings.Hotkey = _currentHotkey.Clone();
-        _settingsManager.Save();
+        _settingsService.Settings.Hotkey = _currentHotkey.Clone();
+        _settingsService.Save();
 
         DialogResult = true;
         Close();

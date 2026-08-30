@@ -1,11 +1,11 @@
 using System.IO;
-using System.Text.RegularExpressions;
+using Clipper.Core.Ports.Outbound;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace Clipper;
+namespace Clipper.Infrastructure.Persistence;
 
-public class PatternManager
+public class YamlPatternRepository : IPatternRepository
 {
     private static readonly string ConfigPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -16,9 +16,7 @@ public class PatternManager
     private readonly ISerializer _serializer;
     private readonly IDeserializer _deserializer;
 
-    public List<ClipboardPattern> Patterns { get; private set; } = new();
-
-    public PatternManager()
+    public YamlPatternRepository()
     {
         _serializer = new SerializerBuilder()
             .WithNamingConvention(PascalCaseNamingConvention.Instance)
@@ -28,59 +26,59 @@ public class PatternManager
             .WithNamingConvention(PascalCaseNamingConvention.Instance)
             .IgnoreUnmatchedProperties()
             .Build();
-
-        Load();
     }
 
-    public void Load()
+    public List<ClipboardPattern> Load()
     {
         if (!File.Exists(ConfigPath))
         {
-            Patterns = GetDefaultPatterns();
-            Save();
-            return;
+            var defaultPatterns = GetDefaultPatterns();
+            Save(defaultPatterns);
+            return defaultPatterns;
         }
 
         try
         {
             string yaml = File.ReadAllText(ConfigPath);
-            Patterns = _deserializer.Deserialize<List<ClipboardPattern>>(yaml) ?? GetDefaultPatterns();
-            
+            var patterns = _deserializer.Deserialize<List<ClipboardPattern>>(yaml) ?? GetDefaultPatterns();
+
             // Migration: Fix the URL pattern if it's the old broken one that used capturing groups
-            var urlPattern = Patterns.FirstOrDefault(p => p.Name == "URL");
+            var urlPattern = patterns.FirstOrDefault(p => p.Name == "URL");
             if (urlPattern != null && (urlPattern.RegexPattern.Contains("(www\\.)") || urlPattern.RegexPattern.Contains("(?i)")))
             {
                 var newDefaults = GetDefaultPatterns();
                 var defaultUrl = newDefaults.First(p => p.Name == "URL");
                 urlPattern.RegexPattern = defaultUrl.RegexPattern;
-                Save();
+                Save(patterns);
             }
 
             // Migration: Ensure Hex Color has action so it can display notifications and preview actions
-            var hexPattern = Patterns.FirstOrDefault(p => p.Name == "Hex Color");
+            var hexPattern = patterns.FirstOrDefault(p => p.Name == "Hex Color");
             if (hexPattern != null && (hexPattern.Actions == null || hexPattern.Actions.Count == 0))
             {
                 hexPattern.Actions = new List<ClipboardAction>
                 {
                     new ClipboardAction { Label = "Copy Color", Type = ClipboardActionType.Copy, ParameterTemplate = "{0}" }
                 };
-                Save();
+                Save(patterns);
             }
+
+            return patterns;
         }
         catch
         {
-            Patterns = GetDefaultPatterns();
+            return GetDefaultPatterns();
         }
     }
 
-    public void Save()
+    public void Save(IEnumerable<ClipboardPattern> patterns)
     {
         try
         {
             string directory = Path.GetDirectoryName(ConfigPath)!;
             if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
 
-            string yaml = _serializer.Serialize(Patterns);
+            string yaml = _serializer.Serialize(patterns.ToList());
             File.WriteAllText(ConfigPath, yaml);
         }
         catch (Exception ex)
@@ -89,7 +87,7 @@ public class PatternManager
         }
     }
 
-    private List<ClipboardPattern> GetDefaultPatterns()
+    private static List<ClipboardPattern> GetDefaultPatterns()
     {
         return new List<ClipboardPattern>
         {

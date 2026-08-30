@@ -1,52 +1,59 @@
+﻿using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Interop;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using Clipper;
 using System.Windows.Forms;
-using System.IO;
-using System.Windows.Threading;
+using System.Windows.Interop;
+using Clipper.Core.Ports.Inbound;
+using Clipper.Core.Ports.Outbound;
 using Wpf.Ui.Controls;
 
 namespace Clipper.Windows;
 
 public partial class MainWindow : FluentWindow
 {
-    private const int WM_CLIPBOARDUPDATE = 0x031D;
-    private const int WM_HOTKEY = 0x0312;
-    private const int HOTKEY_ID = 9000;
+    private const int HOTKEY_LAUNCH_ID = 9000;
     private const int HOTKEY_CAPTURE_ID = 9001;
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+    private readonly ISystemClipboard _clipboard;
+    private readonly IClipboardListener _clipboardListener;
+    private readonly IClipboardHistoryService _historyService;
+    private readonly ISettingsService _settingsService;
+    private readonly IHotkeyService _hotkeyService;
+    private readonly IWindowPlacementService _windowPlacementService;
+    private readonly IWindowService _windowService;
 
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool AddClipboardFormatListener(IntPtr hwnd);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
-
-    private List<ClipboardItem> _history = new();
-    private bool _isInternalCopy = false;
     private HwndSource? _hwndSource;
     private NotifyIcon? _notifyIcon;
-    private bool _isExiting = false;
-    private readonly PatternManager _patternManager;
-    private readonly SettingsManager _settingsManager;
+    private bool _isExiting;
 
-    public MainWindow()
+    public MainWindow(
+        ISystemClipboard clipboard,
+        IClipboardListener clipboardListener,
+        IClipboardHistoryService historyService,
+        ISettingsService settingsService,
+        IHotkeyService hotkeyService,
+        IWindowPlacementService windowPlacementService,
+        IWindowService windowService)
     {
         InitializeComponent();
-        _patternManager = new PatternManager();
-        _settingsManager = new SettingsManager();
         ThemeHelper.ApplyDarkTheme(this);
+
+        _clipboard = clipboard;
+        _clipboardListener = clipboardListener;
+        _historyService = historyService;
+        _settingsService = settingsService;
+        _hotkeyService = hotkeyService;
+        _windowPlacementService = windowPlacementService;
+        _windowService = windowService;
+
+        _clipboardListener.ClipboardUpdated += OnClipboardUpdated;
+        _hotkeyService.HotkeyPressed += OnHotkeyPressed;
+        _historyService.HistoryUpdated += (s, e) => UpdateHistoryList();
+
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
         SetupTrayIcon();
@@ -62,7 +69,6 @@ public partial class MainWindow : FluentWindow
         }
         else
         {
-            // If the icon is not in the base directory, try the project directory (for debugging)
             string projectIconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "favicon.ico");
             if (File.Exists(projectIconPath))
             {
@@ -82,31 +88,25 @@ public partial class MainWindow : FluentWindow
         _notifyIcon.ContextMenuStrip = contextMenu;
     }
 
-
-    [DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
-
     private void RestoreWindow()
     {
         ApplyWindowPlacement();
         this.Show();
         this.ShowInTaskbar = true;
         this.WindowState = WindowState.Normal;
-        
+
         IntPtr handle = new WindowInteropHelper(this).Handle;
         SetForegroundWindow(handle);
         this.Activate();
         this.Topmost = true;
         this.Topmost = false;
         this.Focus();
-        
-        // Ensure we are not hidden if something else hid us
+
         if (this.Visibility != Visibility.Visible)
         {
             this.Visibility = Visibility.Visible;
         }
 
-        // Focus the search box for immediate use
         txtSearch.Focus();
     }
 
@@ -122,12 +122,12 @@ public partial class MainWindow : FluentWindow
         IntPtr handle = new WindowInteropHelper(this).Handle;
         _hwndSource = HwndSource.FromHwnd(handle);
         _hwndSource?.AddHook(HwndHandler);
-        AddClipboardFormatListener(handle);
-        
+
+        _clipboardListener.Register(handle);
         RegisterLaunchHotkey();
         RegisterCaptureHotkey();
-
         ApplyWindowPlacement();
+        UpdateHistoryList();
     }
 
     private void RegisterLaunchHotkey()
@@ -135,13 +135,13 @@ public partial class MainWindow : FluentWindow
         IntPtr handle = new WindowInteropHelper(this).Handle;
         if (handle == IntPtr.Zero) return;
 
-        UnregisterHotKey(handle, HOTKEY_ID);
+        _hotkeyService.UnregisterHotkey(handle, HOTKEY_LAUNCH_ID);
 
-        var hotkey = _settingsManager.Settings.Hotkey;
+        var hotkey = _settingsService.Settings.Hotkey;
         uint modifiers = hotkey.GetModifiers();
         uint vk = hotkey.GetVirtualKey();
 
-        bool registered = RegisterHotKey(handle, HOTKEY_ID, modifiers, vk);
+        bool registered = _hotkeyService.RegisterHotkey(handle, HOTKEY_LAUNCH_ID, modifiers, vk);
         if (!registered)
         {
             int error = Marshal.GetLastWin32Error();
@@ -158,72 +158,13 @@ public partial class MainWindow : FluentWindow
         IntPtr handle = new WindowInteropHelper(this).Handle;
         if (handle == IntPtr.Zero) return;
 
-        UnregisterHotKey(handle, HOTKEY_CAPTURE_ID);
-        RegisterHotKey(handle, HOTKEY_CAPTURE_ID, 0x0002 | 0x0004, 0x53); // Ctrl+Shift+S (MOD_CONTROL=0x0002, MOD_SHIFT=0x0004)
+        _hotkeyService.UnregisterHotkey(handle, HOTKEY_CAPTURE_ID);
+        _hotkeyService.RegisterHotkey(handle, HOTKEY_CAPTURE_ID, 0x0002 | 0x0004, 0x53); // Ctrl+Shift+S
     }
 
     private void ApplyWindowPlacement()
     {
-        var cursorPoint = System.Windows.Forms.Cursor.Position;
-        var screen = System.Windows.Forms.Screen.FromPoint(cursorPoint) ?? System.Windows.Forms.Screen.PrimaryScreen;
-        if (screen == null) return;
-
-        var dpi = VisualTreeHelper.GetDpi(this);
-        double dpiX = dpi.DpiScaleX;
-        double dpiY = dpi.DpiScaleY;
-        if (dpiX <= 0) dpiX = 1.0;
-        if (dpiY <= 0) dpiY = 1.0;
-
-        var workingArea = screen.WorkingArea;
-        double workLeft = workingArea.Left / dpiX;
-        double workTop = workingArea.Top / dpiY;
-        double workWidth = workingArea.Width / dpiX;
-        double workHeight = workingArea.Height / dpiY;
-        double workRight = workLeft + workWidth;
-        double workBottom = workTop + workHeight;
-
-        switch (_settingsManager.Settings.Placement)
-        {
-            case WindowPlacement.BottomRight:
-                this.Left = workRight - this.Width;
-                this.Top = workBottom - this.Height;
-                break;
-
-            case WindowPlacement.BottomLeft:
-                this.Left = workLeft;
-                this.Top = workBottom - this.Height;
-                break;
-
-            case WindowPlacement.TopRight:
-                this.Left = workRight - this.Width;
-                this.Top = workTop;
-                break;
-
-            case WindowPlacement.TopLeft:
-                this.Left = workLeft;
-                this.Top = workTop;
-                break;
-
-            case WindowPlacement.Center:
-                this.Left = workLeft + (workWidth - this.Width) / 2.0;
-                this.Top = workTop + (workHeight - this.Height) / 2.0;
-                break;
-
-            case WindowPlacement.Cursor:
-                double cursorX = cursorPoint.X / dpiX;
-                double cursorY = cursorPoint.Y / dpiY;
-                double targetLeft = cursorX - (this.Width / 2.0);
-                double targetTop = cursorY - 30;
-
-                if (targetLeft + this.Width > workRight) targetLeft = workRight - this.Width;
-                if (targetLeft < workLeft) targetLeft = workLeft;
-                if (targetTop + this.Height > workBottom) targetTop = workBottom - this.Height;
-                if (targetTop < workTop) targetTop = workTop;
-
-                this.Left = targetLeft;
-                this.Top = targetTop;
-                break;
-        }
+        _windowPlacementService.ApplyPlacement(this, _settingsService.Settings.Placement);
     }
 
     private void MainWindow_Deactivated(object? sender, EventArgs e)
@@ -246,68 +187,66 @@ public partial class MainWindow : FluentWindow
         }
 
         IntPtr handle = new WindowInteropHelper(this).Handle;
-        RemoveClipboardFormatListener(handle);
-        UnregisterHotKey(handle, HOTKEY_ID);
-        UnregisterHotKey(handle, HOTKEY_CAPTURE_ID);
+        _clipboardListener.Unregister(handle);
+        _hotkeyService.UnregisterAll(handle);
         _hwndSource?.RemoveHook(HwndHandler);
     }
 
     private IntPtr HwndHandler(IntPtr hwnd, int msg, IntPtr wparam, IntPtr lparam, ref bool handled)
     {
-        if (msg == WM_CLIPBOARDUPDATE)
+        if (_clipboardListener.HandleMessage(msg))
         {
-            if (!_isInternalCopy)
-            {
-                OnClipboardChanged();
-            }
+            handled = true;
         }
-        else if (msg == WM_HOTKEY)
+        else if (_hotkeyService.HandleMessage(msg, wparam))
         {
-            int id = wparam.ToInt32();
-            if (id == HOTKEY_ID)
-            {
-                RestoreWindow();
-                handled = true;
-            }
-            else if (id == HOTKEY_CAPTURE_ID)
-            {
-                StartCapture();
-                handled = true;
-            }
+            handled = true;
         }
         return IntPtr.Zero;
     }
 
-    private void OnClipboardChanged()
+    private void OnHotkeyPressed(object? sender, int id)
     {
-        if (_isInternalCopy) return;
-        ClipboardItem? newItem = null;
+        if (id == HOTKEY_LAUNCH_ID)
+        {
+            RestoreWindow();
+        }
+        else if (id == HOTKEY_CAPTURE_ID)
+        {
+            StartCapture();
+        }
+    }
 
+    private void OnClipboardUpdated(object? sender, EventArgs e)
+    {
+        if (_clipboardListener.IsInternalCopy) return;
+
+        ClipboardItem? newItem = null;
         try
         {
-            if (System.Windows.Clipboard.ContainsText())
+            if (_clipboard.ContainsText())
             {
-                string text = System.Windows.Clipboard.GetText();
-                if (_history.FirstOrDefault()?.Text == text) return;
+                string? text = _clipboard.GetText();
+                if (!string.IsNullOrEmpty(text))
+                {
+                    if (_historyService.History.FirstOrDefault()?.Text == text) return;
 
-                newItem = new ClipboardItem 
-                { 
-                    Type = ClipboardItemType.Text, 
-                    Text = text 
-                };
+                    newItem = new ClipboardItem
+                    {
+                        Type = ClipboardItemType.Text,
+                        Text = text
+                    };
+                }
             }
-            else if (System.Windows.Clipboard.ContainsImage())
+            else if (_clipboard.ContainsImage())
             {
-                BitmapSource image = System.Windows.Clipboard.GetImage();
+                var image = _clipboard.GetImage();
                 if (image != null)
                 {
-                    // Freeze the image to avoid cross-thread issues and potential locks
-                    if (image.CanFreeze) image.Freeze();
-                    
-                    newItem = new ClipboardItem 
-                    { 
-                        Type = ClipboardItemType.Image, 
-                        Image = image 
+                    newItem = new ClipboardItem
+                    {
+                        Type = ClipboardItemType.Image,
+                        Image = image
                     };
 
                     newItem.Actions.Add(new ClipboardAction
@@ -321,21 +260,15 @@ public partial class MainWindow : FluentWindow
         }
         catch (Exception ex)
         {
-            // Clipboard access can be flakey
-            System.Diagnostics.Debug.WriteLine($"Clipboard error: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Clipboard processing error: {ex.Message}");
         }
 
         if (newItem != null)
         {
-            ProcessItem(newItem);
-            _history.Insert(0, newItem);
-            if (_history.Count > 100) _history.RemoveAt(_history.Count - 1);
-            UpdateHistoryList();
-
+            _historyService.AddItem(newItem);
             if (newItem.HasActions)
             {
-                var notification = new NotificationWindow(newItem);
-                notification.Show();
+                _windowService.ShowNotification(newItem);
             }
         }
     }
@@ -348,24 +281,18 @@ public partial class MainWindow : FluentWindow
     private async void StartCapture()
     {
         this.Hide();
-        // Small delay to let this window hide
-        await System.Threading.Tasks.Task.Delay(150);
+        await Task.Delay(150);
 
-        var overlay = new CaptureOverlayWindow();
-        bool? result = overlay.ShowDialog();
-        
-        if (result == true && overlay.CapturedImage != null)
+        if (_windowService.ShowCaptureOverlayDialog(out var capturedImage, out _) == true && capturedImage != null)
         {
             var item = new ClipboardItem
             {
                 Type = ClipboardItemType.Image,
-                Image = overlay.CapturedImage
+                Image = capturedImage
             };
-            
-            // Copy to clipboard immediately and handle _isInternalCopy
-            SetClipboardItem(item);
 
-            // Add to history immediately
+            _clipboard.SetClipboardItem(item);
+
             item.Actions.Add(new ClipboardAction
             {
                 Label = "Markup & Edit",
@@ -373,15 +300,10 @@ public partial class MainWindow : FluentWindow
                 Execute = () => EditImage(item)
             });
 
-            ProcessItem(item);
-            _history.Insert(0, item);
-            if (_history.Count > 100) _history.RemoveAt(_history.Count - 1);
-            UpdateHistoryList();
-
-            // Then open editor
+            _historyService.AddItem(item);
             EditImage(item);
         }
-        
+
         RestoreWindow();
     }
 
@@ -389,25 +311,17 @@ public partial class MainWindow : FluentWindow
     {
         if (item.Image == null) return;
 
-        var editor = new ImageEditorWindow(item.Image)
+        if (_windowService.ShowImageEditorDialog(item.Image, out var editedImage, this) == true && editedImage != null)
         {
-            Owner = this
-        };
-
-        if (editor.ShowDialog() == true && editor.ResultImage != null)
-        {
-            var editedImage = editor.ResultImage;
             if (editedImage.CanFreeze) editedImage.Freeze();
 
-            // Manually add to history
             var newItem = new ClipboardItem
             {
                 Type = ClipboardItemType.Image,
                 Image = editedImage
             };
-            
-            // Copy to clipboard and handle _isInternalCopy
-            SetClipboardItem(newItem);
+
+            _clipboard.SetClipboardItem(newItem);
 
             newItem.Actions.Add(new ClipboardAction
             {
@@ -416,144 +330,14 @@ public partial class MainWindow : FluentWindow
                 Execute = () => EditImage(newItem)
             });
 
-            ProcessItem(newItem);
-            _history.Insert(0, newItem);
-            if (_history.Count > 100) _history.RemoveAt(_history.Count - 1);
-            UpdateHistoryList();
-        }
-    }
-
-    private void SetClipboardItem(ClipboardItem item)
-    {
-        if (item == null) return;
-
-        _isInternalCopy = true;
-        try
-        {
-            var dataObject = new System.Windows.DataObject();
-            if (item.Type == ClipboardItemType.Text && item.Text != null)
-            {
-                dataObject.SetText(item.Text);
-            }
-            else if (item.Type == ClipboardItemType.Image && item.Image != null)
-            {
-                dataObject.SetImage(item.Image);
-            }
-
-            // Retry loop because clipboard can be locked by other apps
-            for (int i = 0; i < 10; i++)
-            {
-                try
-                {
-                    System.Windows.Clipboard.SetDataObject(dataObject, true);
-                    break;
-                }
-                catch (COMException)
-                {
-                    System.Threading.Thread.Sleep(50);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Clipboard error: {ex.Message}");
-        }
-
-        // Delay resetting _isInternalCopy to allow the system to process the update message
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-        timer.Tick += (s, e) =>
-        {
-            _isInternalCopy = false;
-            timer.Stop();
-        };
-        timer.Start();
-    }
-
-    private void ProcessItem(ClipboardItem item)
-    {
-        if (item.Type != ClipboardItemType.Text || string.IsNullOrEmpty(item.Text)) return;
-
-        string textToMatch = item.Text.Trim();
-
-        foreach (var pattern in _patternManager.Patterns)
-        {
-            var match = System.Text.RegularExpressions.Regex.Match(textToMatch, pattern.RegexPattern);
-            if (!match.Success && textToMatch != item.Text)
-            {
-                match = System.Text.RegularExpressions.Regex.Match(item.Text, pattern.RegexPattern);
-            }
-            if (match.Success)
-            {
-                foreach (var actionTemplate in pattern.Actions)
-                {
-                    var action = new ClipboardAction
-                    {
-                        Label = actionTemplate.Label,
-                        Type = actionTemplate.Type,
-                        ParameterTemplate = actionTemplate.ParameterTemplate
-                    };
-
-                    // If there is exactly one capturing group (in addition to the full match Group 0),
-                    // and it's not empty, we assume that's the specific value the user wants to extract.
-                    // Otherwise, we use the full match (Group 0) to avoid picking up incidental groups
-                    // like (www\.) or other helper groups.
-                    string parameter = (match.Groups.Count == 2 && !string.IsNullOrEmpty(match.Groups[1].Value))
-                        ? match.Groups[1].Value
-                        : match.Groups[0].Value;
-                    string finalValue = string.Format(action.ParameterTemplate, parameter);
-
-                    action.Execute = action.Type switch
-                    {
-                        ClipboardActionType.OpenUrl => () => OpenUrl(finalValue),
-                        ClipboardActionType.SearchWeb => () => OpenUrl($"https://www.google.com/search?q={Uri.EscapeDataString(finalValue)}"),
-                        ClipboardActionType.Copy => () => {
-                            _isInternalCopy = true;
-                            System.Windows.Clipboard.SetText(finalValue);
-                            _isInternalCopy = false;
-                        },
-                        _ => null
-                    };
-
-                    item.Actions.Add(action);
-                }
-
-                if (item.PreviewData == null && pattern.Name == "Hex Color")
-                {
-                    item.PreviewData = match.Value;
-                }
-            }
-        }
-    }
-
-    private static void OpenUrl(string url)
-    {
-        if (string.IsNullOrWhiteSpace(url)) return;
-
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = url,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex)
-        {
-            System.Windows.MessageBox.Show($"Could not open URL: {ex.Message}");
+            _historyService.AddItem(newItem);
         }
     }
 
     private void UpdateHistoryList()
     {
-        string filter = txtSearch.Text.ToLower();
-        var filteredItems = _history
-            .Where(i => string.IsNullOrEmpty(filter) || 
-                       (i.Text?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                       (i.Type == ClipboardItemType.Image && "[image]".Contains(filter, StringComparison.OrdinalIgnoreCase)))
-            .OrderByDescending(i => i.Timestamp)
-            .ToList();
-
-        lstHistory.ItemsSource = filteredItems;
+        string filter = txtSearch.Text;
+        lstHistory.ItemsSource = _historyService.Search(filter);
     }
 
     private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
@@ -563,18 +347,9 @@ public partial class MainWindow : FluentWindow
 
     private void ShowPatterns_Click(object sender, RoutedEventArgs e)
     {
-        var editor = new PatternEditorWindow(_patternManager);
-        editor.Owner = this;
-        if (editor.ShowDialog() == true)
+        if (_windowService.ShowPatternEditorDialog(this) == true)
         {
-            // Re-process all items in history with new patterns
-            foreach (var item in _history)
-            {
-                item.Actions.Clear();
-                item.PreviewData = null;
-                ProcessItem(item);
-            }
-            UpdateHistoryList();
+            _historyService.ReprocessAll();
         }
     }
 
@@ -585,9 +360,7 @@ public partial class MainWindow : FluentWindow
 
     private void ShowSettings()
     {
-        var settingsWindow = new SettingsWindow(_settingsManager);
-        settingsWindow.Owner = this;
-        if (settingsWindow.ShowDialog() == true)
+        if (_windowService.ShowSettingsDialog(this) == true)
         {
             RegisterLaunchHotkey();
             ApplyWindowPlacement();
@@ -612,7 +385,7 @@ public partial class MainWindow : FluentWindow
 
     private void PasteItem(ClipboardItem item)
     {
-        SetClipboardItem(item);
+        _clipboard.SetClipboardItem(item);
         System.Windows.MessageBox.Show("Item copied back to clipboard. You can now paste it.");
     }
 }

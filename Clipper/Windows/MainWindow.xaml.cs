@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Clipper;
 using System.Windows.Forms;
@@ -38,11 +39,13 @@ public partial class MainWindow : FluentWindow
     private NotifyIcon? _notifyIcon;
     private bool _isExiting = false;
     private readonly PatternManager _patternManager;
+    private readonly SettingsManager _settingsManager;
 
     public MainWindow()
     {
         InitializeComponent();
         _patternManager = new PatternManager();
+        _settingsManager = new SettingsManager();
         ThemeHelper.ApplyDarkTheme(this);
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
@@ -72,6 +75,7 @@ public partial class MainWindow : FluentWindow
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add("Open", null, (s, e) => RestoreWindow());
+        contextMenu.Items.Add("Settings", null, (s, e) => ShowSettings());
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add("Exit", null, (s, e) => ExitApplication());
 
@@ -84,6 +88,7 @@ public partial class MainWindow : FluentWindow
 
     private void RestoreWindow()
     {
+        ApplyWindowPlacement();
         this.Show();
         this.ShowInTaskbar = true;
         this.WindowState = WindowState.Normal;
@@ -118,34 +123,106 @@ public partial class MainWindow : FluentWindow
         _hwndSource = HwndSource.FromHwnd(handle);
         _hwndSource?.AddHook(HwndHandler);
         AddClipboardFormatListener(handle);
-        bool registered = RegisterHotKey(handle, HOTKEY_ID, 0x0001 | 0x0004, 0x56); // Ctrl+Shift+V
-        RegisterHotKey(handle, HOTKEY_CAPTURE_ID, 0x0001 | 0x0004, 0x53); // Ctrl+Shift+S for Screen
-        if (!registered)
-        {
-            // Try another one if Ctrl+Shift+V fails
-            registered = RegisterHotKey(handle, HOTKEY_ID, 0x0002 | 0x0004, 0x56); // Alt+Shift+V
-            if (registered)
-            {
-                System.Windows.MessageBox.Show("Ctrl+Shift+V was in use. Using Alt+Shift+V instead.", "Clipper Hotkey", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
-            }
-            else
-            {
-                int error = Marshal.GetLastWin32Error();
-                System.Windows.MessageBox.Show($"Failed to register global hotkey. Error code: {error}. Shortcuts might be in use by another application.", "Clipper Hotkey Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-            }
-        }
+        
+        RegisterLaunchHotkey();
+        RegisterCaptureHotkey();
 
-        PositionWindowAtBottomRight();
+        ApplyWindowPlacement();
     }
 
-    private void PositionWindowAtBottomRight()
+    private void RegisterLaunchHotkey()
     {
-        var primaryScreen = System.Windows.Forms.Screen.PrimaryScreen;
-        if (primaryScreen != null)
+        IntPtr handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return;
+
+        UnregisterHotKey(handle, HOTKEY_ID);
+
+        var hotkey = _settingsManager.Settings.Hotkey;
+        uint modifiers = hotkey.GetModifiers();
+        uint vk = hotkey.GetVirtualKey();
+
+        bool registered = RegisterHotKey(handle, HOTKEY_ID, modifiers, vk);
+        if (!registered)
         {
-            var workingArea = primaryScreen.WorkingArea;
-            this.Left = workingArea.Right - this.Width;
-            this.Top = workingArea.Bottom - this.Height;
+            int error = Marshal.GetLastWin32Error();
+            System.Windows.MessageBox.Show(
+                $"Failed to register launch hotkey ({hotkey}). Error code: {error}.\nThe shortcut might already be in use by another application.",
+                "Clipper Hotkey Warning",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Warning);
+        }
+    }
+
+    private void RegisterCaptureHotkey()
+    {
+        IntPtr handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return;
+
+        UnregisterHotKey(handle, HOTKEY_CAPTURE_ID);
+        RegisterHotKey(handle, HOTKEY_CAPTURE_ID, 0x0002 | 0x0004, 0x53); // Ctrl+Shift+S (MOD_CONTROL=0x0002, MOD_SHIFT=0x0004)
+    }
+
+    private void ApplyWindowPlacement()
+    {
+        var cursorPoint = System.Windows.Forms.Cursor.Position;
+        var screen = System.Windows.Forms.Screen.FromPoint(cursorPoint) ?? System.Windows.Forms.Screen.PrimaryScreen;
+        if (screen == null) return;
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        double dpiX = dpi.DpiScaleX;
+        double dpiY = dpi.DpiScaleY;
+        if (dpiX <= 0) dpiX = 1.0;
+        if (dpiY <= 0) dpiY = 1.0;
+
+        var workingArea = screen.WorkingArea;
+        double workLeft = workingArea.Left / dpiX;
+        double workTop = workingArea.Top / dpiY;
+        double workWidth = workingArea.Width / dpiX;
+        double workHeight = workingArea.Height / dpiY;
+        double workRight = workLeft + workWidth;
+        double workBottom = workTop + workHeight;
+
+        switch (_settingsManager.Settings.Placement)
+        {
+            case WindowPlacement.BottomRight:
+                this.Left = workRight - this.Width;
+                this.Top = workBottom - this.Height;
+                break;
+
+            case WindowPlacement.BottomLeft:
+                this.Left = workLeft;
+                this.Top = workBottom - this.Height;
+                break;
+
+            case WindowPlacement.TopRight:
+                this.Left = workRight - this.Width;
+                this.Top = workTop;
+                break;
+
+            case WindowPlacement.TopLeft:
+                this.Left = workLeft;
+                this.Top = workTop;
+                break;
+
+            case WindowPlacement.Center:
+                this.Left = workLeft + (workWidth - this.Width) / 2.0;
+                this.Top = workTop + (workHeight - this.Height) / 2.0;
+                break;
+
+            case WindowPlacement.Cursor:
+                double cursorX = cursorPoint.X / dpiX;
+                double cursorY = cursorPoint.Y / dpiY;
+                double targetLeft = cursorX - (this.Width / 2.0);
+                double targetTop = cursorY - 30;
+
+                if (targetLeft + this.Width > workRight) targetLeft = workRight - this.Width;
+                if (targetLeft < workLeft) targetLeft = workLeft;
+                if (targetTop + this.Height > workBottom) targetTop = workBottom - this.Height;
+                if (targetTop < workTop) targetTop = workTop;
+
+                this.Left = targetLeft;
+                this.Top = targetTop;
+                break;
         }
     }
 
@@ -498,6 +575,22 @@ public partial class MainWindow : FluentWindow
                 ProcessItem(item);
             }
             UpdateHistoryList();
+        }
+    }
+
+    private void ShowSettings_Click(object sender, RoutedEventArgs e)
+    {
+        ShowSettings();
+    }
+
+    private void ShowSettings()
+    {
+        var settingsWindow = new SettingsWindow(_settingsManager);
+        settingsWindow.Owner = this;
+        if (settingsWindow.ShowDialog() == true)
+        {
+            RegisterLaunchHotkey();
+            ApplyWindowPlacement();
         }
     }
 

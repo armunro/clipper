@@ -29,6 +29,7 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <ui:TextBox x:Name="txtSearch" Grid.Column="0" Margin="0,0,4,0"
                         PlaceholderText="Search clipboard..."
@@ -43,6 +44,9 @@
                        Margin="0,0,4,0" Padding="6,3" MinHeight="30" Appearance="Secondary"/>
             <ui:Button Grid.Column="2" ToolTip="Clipboard Patterns" Click="ShowPatterns_Click" 
                        Icon="{ui:SymbolIcon Symbol=DocumentBulletList24}" 
+                       Margin="0,0,4,0" Padding="6,3" MinHeight="30" Appearance="Secondary"/>
+            <ui:Button Grid.Column="3" ToolTip="Settings" Click="ShowSettings_Click" 
+                       Icon="{ui:SymbolIcon Symbol=Settings24}" 
                        Margin="0" Padding="6,3" MinHeight="30" Appearance="Secondary"/>
         </Grid>
 

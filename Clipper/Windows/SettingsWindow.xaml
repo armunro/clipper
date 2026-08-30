@@ -1,0 +1,102 @@
+﻿<ui:FluentWindow x:Class="Clipper.Windows.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:local="clr-namespace:Clipper.Windows"
+        xmlns:root="clr-namespace:Clipper"
+        Title="Settings" Height="480" Width="480"
+        WindowBackdropType="Mica"
+        ExtendsContentIntoTitleBar="True"
+        WindowCornerPreference="Round"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    <Grid Margin="12,6,12,12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="Settings" ShowMaximize="False" ShowMinimize="False" Height="30" Margin="0,0,0,8"/>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,8">
+            <StackPanel Margin="0,0,4,0">
+                <!-- Section 1: Window Placement -->
+                <Border BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        Padding="12,10" Margin="0,0,0,12" CornerRadius="6">
+                    <StackPanel>
+                        <TextBlock Text="Window Placement" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                        <TextBlock Text="Choose where Clipper opens on your screen." FontSize="11" 
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,8"/>
+
+                        <ComboBox x:Name="cmbPlacement" SelectedValuePath="Tag" MinHeight="30" FontSize="12" Padding="8,4" HorizontalAlignment="Stretch">
+                            <ComboBoxItem Content="Bottom Right (Default)" Tag="{x:Static root:WindowPlacement.BottomRight}"/>
+                            <ComboBoxItem Content="At Cursor" Tag="{x:Static root:WindowPlacement.Cursor}"/>
+                            <ComboBoxItem Content="Center Screen" Tag="{x:Static root:WindowPlacement.Center}"/>
+                            <ComboBoxItem Content="Bottom Left" Tag="{x:Static root:WindowPlacement.BottomLeft}"/>
+                            <ComboBoxItem Content="Top Right" Tag="{x:Static root:WindowPlacement.TopRight}"/>
+                            <ComboBoxItem Content="Top Left" Tag="{x:Static root:WindowPlacement.TopLeft}"/>
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+
+                <!-- Section 2: Global Hotkey -->
+                <Border BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        Padding="12,10" Margin="0,0,0,8" CornerRadius="6">
+                    <StackPanel>
+                        <TextBlock Text="Launch Hotkey" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                        <TextBlock Text="Global keyboard shortcut to open the Clipper window." FontSize="11" 
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,8"/>
+
+                        <!-- Hotkey Recorder Box -->
+                        <TextBlock Text="Shortcut (Click to record)" FontSize="11" Margin="0,0,0,2" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ui:TextBox x:Name="txtHotkeyDisplay" Grid.Column="0"
+                                        FontFamily="Cascadia Code, Consolas, Courier New"
+                                        FontSize="12"
+                                        FontWeight="SemiBold"
+                                        Padding="8,4"
+                                        MinHeight="30"
+                                        IsReadOnly="True"
+                                        Cursor="Hand"
+                                        PreviewKeyDown="TxtHotkeyDisplay_PreviewKeyDown"
+                                        GotFocus="TxtHotkeyDisplay_GotFocus"
+                                        LostFocus="TxtHotkeyDisplay_LostFocus"
+                                        Margin="0,0,6,0"/>
+                            <ui:Button Grid.Column="1" Content="Reset" Click="ResetHotkey_Click" 
+                                       Icon="{ui:SymbolIcon Symbol=ArrowReset24}" 
+                                       Padding="8,4" MinHeight="30" Appearance="Secondary"
+                                       ToolTip="Reset to default (Ctrl + Shift + V)"/>
+                        </Grid>
+
+                        <!-- Manual Modifiers Selection -->
+                        <TextBlock Text="Modifiers" FontSize="11" Margin="0,2,0,4" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <WrapPanel Margin="0,0,0,8">
+                            <CheckBox x:Name="chkCtrl" Content="Ctrl" Margin="0,0,12,0" Checked="Modifier_Changed" Unchecked="Modifier_Changed"/>
+                            <CheckBox x:Name="chkShift" Content="Shift" Margin="0,0,12,0" Checked="Modifier_Changed" Unchecked="Modifier_Changed"/>
+                            <CheckBox x:Name="chkAlt" Content="Alt" Margin="0,0,12,0" Checked="Modifier_Changed" Unchecked="Modifier_Changed"/>
+                            <CheckBox x:Name="chkWin" Content="Windows" Margin="0,0,12,0" Checked="Modifier_Changed" Unchecked="Modifier_Changed"/>
+                        </WrapPanel>
+
+                        <!-- Key Selection -->
+                        <TextBlock Text="Key" FontSize="11" Margin="0,0,0,2" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <ComboBox x:Name="cmbKey" MinHeight="28" FontSize="12" Padding="8,3" 
+                                  SelectionChanged="CmbKey_SelectionChanged" HorizontalAlignment="Stretch"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Bottom Action Buttons -->
+        <DockPanel Grid.Row="2" Margin="0,4,0,0">
+            <ui:Button Content="Cancel" Click="Cancel_Click" DockPanel.Dock="Left" Padding="12,5" MinHeight="30" Appearance="Secondary"/>
+            <ui:Button Content="Save Settings" Click="Save_Click" Icon="{ui:SymbolIcon Symbol=Save24}" DockPanel.Dock="Right" HorizontalAlignment="Right" Padding="14,5" MinHeight="30" Appearance="Primary" FontWeight="SemiBold"/>
+        </DockPanel>
+    </Grid>
+</ui:FluentWindow>

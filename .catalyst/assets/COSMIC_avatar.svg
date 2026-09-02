@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   class="svg-canvas"
+   viewBox="71.658766353431 178.83358842409 242.33282315183 242.33282315183"
+   width="1600"
+   height="1600"
+   preserveAspectRatio="none"
+   version="1.1"
+   style="background-color:#0f0623"
+   id="svg4"
+   sodipodi:docname="COSMIC_avatar.svg"
+   inkscape:version="1.4.4 (dcaf3e7, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview4"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.17832349"
+     inkscape:cx="1040.2443"
+     inkscape:cy="989.77426"
+     inkscape:window-width="1920"
+     inkscape:window-height="1009"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="shape_nyRZ3CSQ2D" />
+  <!--滤镜-->
+  <defs
+     id="defs1" />
+  <!-- 背景 -->
+  <g
+     id="background" />
+  <!--元素-->
+  <g
+     id="shape_nyRZ3CSQ2D"
+     ref="shape_nyRZ3CSQ2D"
+     key="shape_nyRZ3CSQ2D"
+     mask="">
+    <g
+       transform="matrix(1.4844168,0,0,1.4844168,76.295825,189.62206)"
+       style="opacity:1"
+       filter=""
+       id="g4">
+      <!--普通元素-->
+      <svg
+         version="1.1"
+         id="图层_1"
+         x="0px"
+         y="0px"
+         width="145.65036"
+         height="149.63298"
+         viewBox="48.400002 47.699997 102.4 105.2"
+         xml:space="preserve"
+         class="style-removed"
+         preserveAspectRatio="none"
+         data-parent="shape_nyRZ3CSQ2D">
+
+<path
+   d="M 112.1,152.9 H 101 c -29,0 -52.6,-23.6 -52.6,-52.6 0,-29 23.6,-52.6 52.6,-52.6 h 44.6 c 2.9,0 5.2,2.3 5.2,5.2 0,2.9 -2.3,5.2 -5.2,5.2 H 101 c -23.3,0 -42.3,19 -42.3,42.3 0,23.3 19,42.3 42.3,42.3 h 11.1 c 2.9,0 5.2,2.3 5.2,5.2 0,2.9 -2.3,5 -5.2,5 z"
+   fill="#b03bff"
+   stroke-width="0"
+   id="path1" />
+<path
+   d="M 145.6,152.9 H 129 c -2.9,0 -5.2,-2.3 -5.2,-5.2 0,-2.9 2.3,-5.2 5.2,-5.2 h 16.6 c 2.9,0 5.2,2.3 5.2,5.2 0,2.9 -2.3,5.2 -5.2,5.2 z"
+   fill="#b03bff"
+   stroke-width="0"
+   id="path2" />
+<path
+   d="M 145.6,75.8 H 129 c -2.9,0 -5.2,-2.3 -5.2,-5.2 0,-2.9 2.3,-5.2 5.2,-5.2 h 16.6 c 2.9,0 5.2,2.3 5.2,5.2 0,2.9 -2.3,5.2 -5.2,5.2 z"
+   fill="#b03bff"
+   stroke-width="0"
+   id="path3" />
+<path
+   d="m 145.6,135.2 h -40.2 c -19.2,0 -34.8,-15.6 -34.8,-34.8 0,-19.2 15.6,-34.8 34.8,-34.8 h 6.8 c 2.9,0 5.2,2.3 5.2,5.2 0,2.9 -2.3,5.2 -5.2,5.2 h -6.8 c -13.5,0 -24.5,11 -24.5,24.5 0,13.5 11,24.5 24.5,24.5 h 40.2 c 2.9,0 5.2,2.3 5.2,5.2 0,2.9 -2.3,5 -5.2,5 z"
+   fill="#b03bff"
+   stroke-width="0"
+   id="path4" />
+</svg>
+    </g>
+  </g>
+</svg>

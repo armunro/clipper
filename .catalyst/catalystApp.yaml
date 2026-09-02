@@ -1,0 +1,21 @@
+name: Clipper
+hidden: false
+catalystDirectory: .
+launch:
+  projectPath: Clipper.csproj
+  executablePath: ''
+  arguments: ''
+  workingDirectory: ''
+  runAsAdmin: true
+icon:
+  color: '#123'
+  secondaryColor: '#234'
+  backgroundType: Gradient
+  gradientDirection: Diagonal
+  label: ''
+  iconPath: ''
+  faviconPath: favicon.ico
+  bootstrapIcon: copy
+  customGlyphSvg: X:\Development\Source\ARmunro\clipper\.catalyst\assets\COSMIC_avatar.svg
+  customGlyphColor: '#EC2D92'
+  svgOverride: ''

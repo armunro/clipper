@@ -7,15 +7,17 @@
         xmlns:local="clr-namespace:Clipper.Windows"
         mc:Ignorable="d"
         Title="Clipper" Height="520" Width="420"
+        Padding="0" Margin="0"
         WindowBackdropType="Mica"
         ExtendsContentIntoTitleBar="True"
         WindowCornerPreference="Round"
+        PreviewKeyDown="MainWindow_PreviewKeyDown"
         Deactivated="MainWindow_Deactivated">
     <ui:FluentWindow.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     </ui:FluentWindow.Resources>
 
-    <Grid Margin="6,4,6,6">
+    <Grid Margin="1">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -25,34 +27,43 @@
         <ui:TitleBar Grid.Row="0" Title="Clipper" ShowMaximize="False" ShowMinimize="False" Height="30" Margin="0,0,0,4"/>
 
         <Grid x:Name="headerGrid" Grid.Row="1" Margin="0,0,0,6">
+            <Grid.Resources>
+                <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
+            </Grid.Resources>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <ui:TextBox x:Name="txtSearch" Grid.Column="0" Margin="0,0,4,0"
+            <ui:TextBox x:Name="txtSearch" Grid.Column="0" Margin="0"
                         PlaceholderText="Search clipboard..."
                         Icon="{ui:SymbolIcon Symbol=Search24}"
                         ClearButtonEnabled="True"
-                        Padding="6,3"
+                        Padding="6,6"
                         MinHeight="30"
                         FontSize="12"
+                        BorderThickness="0"
+                        KeyDown="TxtSearch_KeyDown"
                         TextChanged="TxtSearch_TextChanged"/>
             <ui:Button Grid.Column="1" ToolTip="Screen Capture (Ctrl+Shift+S)" Click="Capture_Click" 
                        Icon="{ui:SymbolIcon Symbol=Camera24}" 
-                       Margin="0,0,4,0" Padding="6,3" MinHeight="30" Appearance="Secondary"/>
+                       Margin="0" Padding="6,3" MinHeight="30" Appearance="Secondary"
+                       CornerRadius="0" BorderThickness="0"/>
             <ui:Button Grid.Column="2" ToolTip="Clipboard Patterns" Click="ShowPatterns_Click" 
                        Icon="{ui:SymbolIcon Symbol=DocumentBulletList24}" 
-                       Margin="0,0,4,0" Padding="6,3" MinHeight="30" Appearance="Secondary"/>
+                       Margin="0" Padding="6,3" MinHeight="30" Appearance="Secondary"
+                       CornerRadius="0" BorderThickness="0"/>
             <ui:Button Grid.Column="3" ToolTip="Settings" Click="ShowSettings_Click" 
                        Icon="{ui:SymbolIcon Symbol=Settings24}" 
-                       Margin="0" Padding="6,3" MinHeight="30" Appearance="Secondary"/>
+                       Margin="0" Padding="6,3" MinHeight="30" Appearance="Secondary"
+                       CornerRadius="0" BorderThickness="0"/>
         </Grid>
 
         <Grid Grid.Row="2">
             <ListBox x:Name="lstHistory" Margin="0" Padding="0"
                      MouseDoubleClick="LstHistory_MouseDoubleClick"
+                     KeyDown="LstHistory_KeyDown"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                      BorderThickness="0"

@@ -16,7 +16,68 @@ public partial class MainWindow : FluentWindow
     private const int HOTKEY_CAPTURE_ID = 9001;
 
     [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct INPUT
+    {
+        public uint type;
+        public InputUnion u;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct InputUnion
+    {
+        [FieldOffset(0)]
+        public MOUSEINPUT mi;
+        [FieldOffset(0)]
+        public KEYBDINPUT ki;
+        [FieldOffset(0)]
+        public HARDWAREINPUT hi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KEYBDINPUT
+    {
+        public ushort wVk;
+        public ushort wScan;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
+    }
+
+    private const uint INPUT_KEYBOARD = 1;
+    private const uint KEYEVENTF_KEYUP = 0x0002;
+    private const ushort VK_CONTROL = 0x11;
+    private const ushort VK_V = 0x56;
 
     private readonly ISystemClipboard _clipboard;
     private readonly IClipboardListener _clipboardListener;
@@ -29,6 +90,7 @@ public partial class MainWindow : FluentWindow
     private HwndSource? _hwndSource;
     private NotifyIcon? _notifyIcon;
     private bool _isExiting;
+    private IntPtr _lastActiveWindow = IntPtr.Zero;
 
     public MainWindow(
         ISystemClipboard clipboard,
@@ -90,12 +152,18 @@ public partial class MainWindow : FluentWindow
 
     private void RestoreWindow()
     {
+        IntPtr handle = new WindowInteropHelper(this).Handle;
+        IntPtr foreground = GetForegroundWindow();
+        if (foreground != IntPtr.Zero && foreground != handle)
+        {
+            _lastActiveWindow = foreground;
+        }
+
         ApplyWindowPlacement();
         this.Show();
         this.ShowInTaskbar = true;
         this.WindowState = WindowState.Normal;
 
-        IntPtr handle = new WindowInteropHelper(this).Handle;
         SetForegroundWindow(handle);
         this.Activate();
         this.Topmost = true;
@@ -108,6 +176,10 @@ public partial class MainWindow : FluentWindow
         }
 
         txtSearch.Focus();
+        if (lstHistory.Items.Count > 0 && lstHistory.SelectedIndex < 0)
+        {
+            lstHistory.SelectedIndex = 0;
+        }
     }
 
     private void ExitApplication()
@@ -209,6 +281,12 @@ public partial class MainWindow : FluentWindow
     {
         if (id == HOTKEY_LAUNCH_ID)
         {
+            IntPtr foreground = GetForegroundWindow();
+            IntPtr handle = _hwndSource?.Handle ?? new WindowInteropHelper(this).Handle;
+            if (foreground != IntPtr.Zero && foreground != handle)
+            {
+                _lastActiveWindow = foreground;
+            }
             RestoreWindow();
         }
         else if (id == HOTKEY_CAPTURE_ID)
@@ -375,17 +453,162 @@ public partial class MainWindow : FluentWindow
         }
     }
 
-    private void LstHistory_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (lstHistory.SelectedItem is ClipboardItem item)
+        if (e.Key == System.Windows.Input.Key.Escape)
         {
-            PasteItem(item);
+            this.Hide();
+            this.ShowInTaskbar = false;
+            e.Handled = true;
         }
     }
 
-    private void PasteItem(ClipboardItem item)
+    private async void LstHistory_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        if (e.Key == System.Windows.Input.Key.Enter)
+        {
+            if (lstHistory.SelectedItem is ClipboardItem item)
+            {
+                e.Handled = true;
+                await PasteItemAsync(item);
+            }
+        }
+    }
+
+    private async void TxtSearch_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+        {
+            e.Handled = true;
+            if (lstHistory.SelectedItem is ClipboardItem selectedItem)
+            {
+                await PasteItemAsync(selectedItem);
+            }
+            else if (lstHistory.Items.Count > 0)
+            {
+                lstHistory.SelectedIndex = 0;
+                if (lstHistory.SelectedItem is ClipboardItem firstItem)
+                {
+                    await PasteItemAsync(firstItem);
+                }
+            }
+        }
+        else if (e.Key == System.Windows.Input.Key.Down)
+        {
+            if (lstHistory.Items.Count > 0)
+            {
+                if (lstHistory.SelectedIndex < 0)
+                {
+                    lstHistory.SelectedIndex = 0;
+                }
+                lstHistory.Focus();
+                if (lstHistory.ItemContainerGenerator.ContainerFromIndex(lstHistory.SelectedIndex) is System.Windows.Controls.ListBoxItem container)
+                {
+                    container.Focus();
+                }
+                e.Handled = true;
+            }
+        }
+    }
+
+    private async void LstHistory_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (lstHistory.SelectedItem is ClipboardItem item)
+        {
+            await PasteItemAsync(item);
+        }
+    }
+
+    private async Task PasteItemAsync(ClipboardItem item)
+    {
+        _clipboardListener.IsInternalCopy = true;
         _clipboard.SetClipboardItem(item);
-        System.Windows.MessageBox.Show("Item copied back to clipboard. You can now paste it.");
+
+        this.Hide();
+        this.ShowInTaskbar = false;
+
+        IntPtr targetWindow = _lastActiveWindow;
+        if (targetWindow != IntPtr.Zero && IsWindow(targetWindow))
+        {
+            SetForegroundWindow(targetWindow);
+            await Task.Delay(60);
+        }
+        else
+        {
+            await Task.Delay(60);
+        }
+
+        SendPasteKeyStroke();
+    }
+
+    private static void SendPasteKeyStroke()
+    {
+        var inputs = new INPUT[4];
+
+        inputs[0] = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            u = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = VK_CONTROL,
+                    wScan = 0,
+                    dwFlags = 0,
+                    time = 0,
+                    dwExtraInfo = IntPtr.Zero
+                }
+            }
+        };
+
+        inputs[1] = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            u = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = VK_V,
+                    wScan = 0,
+                    dwFlags = 0,
+                    time = 0,
+                    dwExtraInfo = IntPtr.Zero
+                }
+            }
+        };
+
+        inputs[2] = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            u = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = VK_V,
+                    wScan = 0,
+                    dwFlags = KEYEVENTF_KEYUP,
+                    time = 0,
+                    dwExtraInfo = IntPtr.Zero
+                }
+            }
+        };
+
+        inputs[3] = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            u = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = VK_CONTROL,
+                    wScan = 0,
+                    dwFlags = KEYEVENTF_KEYUP,
+                    time = 0,
+                    dwExtraInfo = IntPtr.Zero
+                }
+            }
+        };
+
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 }

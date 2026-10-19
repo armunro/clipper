@@ -41,11 +41,14 @@ public class WindowsScreenCaptureAdapter : IScreenCaptureService
 
     public BitmapSource CaptureRegion(Int32Rect region)
     {
-        using (Bitmap bitmap = new Bitmap(region.Width, region.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
+        int width = Math.Max(1, region.Width);
+        int height = Math.Max(1, region.Height);
+
+        using (Bitmap bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
         {
             using (Graphics g = Graphics.FromImage(bitmap))
             {
-                g.CopyFromScreen(region.X, region.Y, 0, 0, new System.Drawing.Size(region.Width, region.Height), CopyPixelOperation.SourceCopy);
+                g.CopyFromScreen(region.X, region.Y, 0, 0, new System.Drawing.Size(width, height), CopyPixelOperation.SourceCopy);
             }
             return ToBitmapSource(bitmap);
         }
@@ -54,8 +57,8 @@ public class WindowsScreenCaptureAdapter : IScreenCaptureService
     public BitmapSource CaptureWindow(IntPtr hWnd)
     {
         GetWindowRect(hWnd, out RECT rect);
-        int width = rect.Right - rect.Left;
-        int height = rect.Bottom - rect.Top;
+        int width = Math.Max(1, rect.Right - rect.Left);
+        int height = Math.Max(1, rect.Bottom - rect.Top);
 
         using (Bitmap bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
         {
